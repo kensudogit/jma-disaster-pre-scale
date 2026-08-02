@@ -299,6 +299,9 @@ class InMemoryStateStore:
 
 def build_store(config: Any, table: Any | None = None) -> StateStore:
     """設定に応じて DynamoDB / インメモリのどちらかを返す。"""
+    backend = os.environ.get("STATE_BACKEND", "").strip().lower()
+    if backend in {"memory", "inmemory", "local"}:
+        return InMemoryStateStore(config.service_name)
     if table is not None:
         return DynamoStateStore(table, config.service_name)
     if config.dry_run and not config.aws.state_table:

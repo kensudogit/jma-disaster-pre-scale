@@ -9,6 +9,27 @@ AWSインフラを災害アクセス集中前に事前拡張する制御基盤�
 
 ---
 
+## Railway (ops 面)
+
+本番スケール適用は AWS (Terraform / Lambda) です。Railway には監視・dry-run 用の
+軽量 HTTP 面 (`jma_pre_scale.web`) を載せられます。
+
+```bash
+# ローカル
+pip install -e ".[dev]"
+uvicorn jma_pre_scale.web:app --reload --port 8000
+```
+
+Railway は `railway.toml` の `startCommand` で起動します。
+
+| パス | 用途 |
+|------|------|
+| `GET /health` | ヘルスチェック |
+| `GET /api/v1/status` | 設定・状態サマリ |
+| `POST /api/v1/poll` | 1回分の dry-run ポーリング |
+
+環境変数: `STATE_BACKEND=memory` (既定), `DRY_RUN=true` (既定)
+
 ## クイックスタート
 
 ```bash
