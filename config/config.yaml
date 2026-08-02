@@ -1,0 +1,82 @@
+# 気象庁防災情報XML 事前スケール 設定例
+# 初期導入では dry_run: true を維持すること。
+
+service_name: disaster-access-system
+region: ap-northeast-1
+dry_run: true   # 本番切替時のみ false
+poll_interval_minutes: 1
+
+jma:
+  feed_urls:
+    - "https://www.data.jma.go.jp/developer/xml/feed/extra.xml"   # 随時(警報・注意報)
+    - "https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml"   # 地震火山
+  request_timeout_seconds: 10
+  max_retries: 2
+  retry_backoff_seconds: 1
+  user_agent: "jma-disaster-pre-scale/1.0 (+ops@example.jp)"
+  max_feed_bytes: 8388608
+  max_document_bytes: 4194304
+  max_documents_per_run: 20
+  # コード体系は電文で異なる(府県予報区6桁 / 地震の府県2桁 / 津波予報区3桁)。
+  # コードと名称の両方を書いておくと取りこぼさない。空にすると全国が対象。
+  target_area_codes: ["130000", "140000", "13", "14"]
+  target_area_names: ["東京都", "神奈川県"]
+  supported_event_types:
+    - heavy_rain
+    - flood
+    - typhoon
+    - earthquake
+    - tsunami
+    - storm
+    - high_tide
+  accept_drill_messages: false
+
+scaling:
+  level_0:  # 平時。突発災害に備えた常時予備容量を含む
+    ecs_desired_count: 2
+    ecs_min_capacity: 2
+    aurora_min_acu: 0.5
+    aurora_max_acu: 8
+  level_1:  # 注意報
+    ecs_desired_count: 5
+    ecs_min_capacity: 5
+    aurora_min_acu: 2
+    aurora_max_acu: 16
+  level_2:  # 警報 / 津波注意報 / 震度5弱-5強
+    ecs_desired_count: 15
+    ecs_min_capacity: 15
+    aurora_min_acu: 8
+    aurora_max_acu: 32
+  level_3:  # 特別警報 / 津波警報・大津波警報 / 震度6弱以上
+    ecs_desired_count: 40
+    ecs_min_capacity: 40
+    aurora_min_acu: 16
+    aurora_max_acu: 64
+  cooldown_minutes: 120
+  scale_in_step: 5
+  absolute_max_capacity: 50
+
+aws_resources:
+  ecs_cluster: "SET_ECS_CLUSTER"
+  ecs_service: "SET_ECS_SERVICE"
+  aurora_cluster_id: "SET_AURORA_CLUSTER_ID"
+  state_table: "jma-pre-scale-state"
+  notification_topic_arn: "SET_SNS_TOPIC_ARN"
+  approval_topic_arn: "SET_APPROVAL_TOPIC_ARN"
+  state_machine_arn: "SET_STATE_MACHINE_ARN"
+  alb_target_group_arn: ""
+
+safety:
+  require_manual_approval_for_level_3: true
+  hold_on_feed_error: true
+  allow_automatic_scale_in: false
+  absolute_max_aurora_acu: 64
+  baseline_reserve_tasks: 2
+  lock_ttl_seconds: 900
+  health_check_timeout_seconds: 600
+
+# 災害種別ごとにレベルを上書きしたい場合のみ指定する。
+# 例: 地震は注意報相当(震度4)でも LEVEL_2 まで上げる
+severity_overrides:
+  earthquake:
+    advisory: 2

@@ -1,0 +1,262 @@
+{
+  "Comment": "JMA Disaster Pre-Scale: Dry Run -> 承認 -> 段階適用 -> ヘルスチェック -> 通知。失敗しても縮小はしない。",
+  "StartAt": "Plan",
+  "TimeoutSeconds": 3600,
+  "States": {
+    "Plan": {
+      "Type": "Task",
+      "Comment": "現況取得と適用計画の作成。ここまでは一切の変更を行わない。",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PlannerFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "IsDryRun"
+    },
+
+    "IsDryRun": {
+      "Type": "Choice",
+      "Comment": "Dry Run では承認を求めず、適用ステップも実APIを呼ばない。",
+      "Choices": [
+        {
+          "Variable": "$.dry_run",
+          "BooleanEquals": true,
+          "Next": "ApplyScaling"
+        },
+        {
+          "Variable": "$.requires_approval",
+          "BooleanEquals": true,
+          "Next": "WaitForApproval"
+        }
+      ],
+      "Default": "ApplyScaling"
+    },
+
+    "WaitForApproval": {
+      "Type": "Task",
+      "Comment": "LEVEL_3(特別警報等)は人の承認を必須にする。タイムアウト時は1段下の容量を自動適用する。",
+      "Resource": "arn:aws:states:::sns:publish.waitForTaskToken",
+      "Parameters": {
+        "TopicArn": "${ApprovalTopicArn}",
+        "Subject": "[承認要求] 事前スケール LEVEL_3 適用可否",
+        "Message": {
+          "taskToken.$": "$$.Task.Token",
+          "executionArn.$": "$$.Execution.Id",
+          "reason.$": "$.reason",
+          "level.$": "$.level_name",
+          "target.$": "$.target",
+          "plan.$": "$.plan",
+          "approve_command.$": "States.Format('aws stepfunctions send-task-success --task-token {} --task-output \\'{{\"approved\":true}}\\'', $$.Task.Token)"
+        }
+      },
+      "TimeoutSeconds": 600,
+      "ResultPath": "$.approval",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "ResultPath": "$.approval_error",
+          "Next": "ApplyFallback"
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.approval_error",
+          "Next": "ApplyFallback"
+        }
+      ],
+      "Next": "ApplyScaling"
+    },
+
+    "ApplyFallback": {
+      "Type": "Pass",
+      "Comment": "承認が得られなくても現状維持で放置しない。1段下の容量へ自動拡張する。",
+      "Parameters": {
+        "action.$": "$.action",
+        "level.$": "$.level",
+        "level_name.$": "$.level_name",
+        "previous_level.$": "$.previous_level",
+        "state.$": "$.state",
+        "dry_run.$": "$.dry_run",
+        "capacity_before.$": "$.capacity_before",
+        "target.$": "$.fallback_target",
+        "requires_approval": false,
+        "approval_timed_out": true,
+        "reason.$": "States.Format('承認タイムアウトのため縮退目標を適用します: {}', $.reason)"
+      },
+      "Next": "ApplyScaling"
+    },
+
+    "ApplyScaling": {
+      "Type": "Task",
+      "Comment": "Aurora -> ECS MinCapacity -> ECS DesiredCount の順に絶対値で適用(冪等)。",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ScalerFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "ThrottlingException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "CheckApplyResult"
+    },
+
+    "CheckApplyResult": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.apply_result.status",
+          "StringEquals": "DRY_RUN",
+          "Next": "NotifySuccess"
+        },
+        {
+          "Variable": "$.apply_result.status",
+          "StringEquals": "FAILED",
+          "Next": "NotifyFailure"
+        },
+        {
+          "Variable": "$.apply_result.status",
+          "StringEquals": "PARTIAL",
+          "Comment": "一部だけ成功。ロールバック(縮小)はせず、健全性を見てから通知する。",
+          "Next": "WaitForWarmup"
+        }
+      ],
+      "Default": "WaitForWarmup"
+    },
+
+    "WaitForWarmup": {
+      "Type": "Wait",
+      "Comment": "タスク起動・ウォームアップ・ヘルスチェック通過を待つ。",
+      "Seconds": 30,
+      "Next": "HealthCheck"
+    },
+
+    "HealthCheck": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${HealthCheckFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "EvaluateHealth"
+    },
+
+    "EvaluateHealth": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.health_status",
+          "StringEquals": "IN_PROGRESS",
+          "Next": "WaitForWarmup"
+        },
+        {
+          "Variable": "$.health_status",
+          "StringEquals": "HEALTHY",
+          "Next": "EvaluateApplyStatus"
+        }
+      ],
+      "Default": "NotifyFailure"
+    },
+
+    "EvaluateApplyStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.apply_result.status",
+          "StringEquals": "PARTIAL",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Default": "NotifySuccess"
+    },
+
+    "NotifySuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${NotifyFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "End": true
+    },
+
+    "NotifyFailure": {
+      "Type": "Task",
+      "Comment": "失敗しても縮小は行わない。現在容量を維持したまま人へエスカレーションする。",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${NotifyFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "Failed"
+    },
+
+    "Failed": {
+      "Type": "Fail",
+      "Comment": "CloudWatch の ExecutionsFailed アラームで運用者を呼び出すため、明示的に失敗させる。",
+      "Error": "PreScaleFailed",
+      "Cause": "事前スケール処理が完了しませんでした。現在容量は維持されています。"
+    }
+  }
+}

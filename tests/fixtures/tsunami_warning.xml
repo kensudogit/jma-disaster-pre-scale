@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Report xmlns="http://xml.kishou.go.jp/jmaxml1/">
+  <Control>
+    <Title>津波警報・注意報・予報a</Title>
+    <DateTime>2026-08-02T02:03:00Z</DateTime>
+    <Status>通常</Status>
+    <EditorialOffice>気象庁本庁</EditorialOffice>
+    <PublishingOffice>気象庁</PublishingOffice>
+  </Control>
+  <Head xmlns="http://xml.kishou.go.jp/jmaxml1/informationBasis1/">
+    <Title>津波警報・注意報・予報</Title>
+    <ReportDateTime>2026-08-02T11:03:00+09:00</ReportDateTime>
+    <TargetDateTime>2026-08-02T11:03:00+09:00</TargetDateTime>
+    <EventID>20260802105800</EventID>
+    <InfoType>発表</InfoType>
+    <Serial>1</Serial>
+    <InfoKind>津波警報・注意報・予報</InfoKind>
+    <InfoKindVersion>1.0_0</InfoKindVersion>
+    <Headline><Text>津波警報を発表しました。</Text></Headline>
+  </Head>
+  <Body xmlns="http://xml.kishou.go.jp/jmaxml1/body/seismology1/">
+    <Tsunami>
+      <Forecast>
+        <Item>
+          <Area><Name>東京湾内湾</Name><Code>101</Code></Area>
+          <Category>
+            <Kind><Name>津波警報</Name><Code>52</Code></Kind>
+          </Category>
+        </Item>
+      </Forecast>
+    </Tsunami>
+  </Body>
+</Report>

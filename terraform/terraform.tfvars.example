@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# 環境固有値。実環境の値に置き換えてから apply すること。
+# 初期導入では dry_run = true を維持し、負荷試験と運用承認後に false にする。
+# ---------------------------------------------------------------------------
+
+region       = "ap-northeast-1"
+name_prefix  = "jma-pre-scale"
+service_name = "disaster-access-system"
+
+# 【重要】最初は必ず true。実APIは一切呼ばれない。
+dry_run = true
+
+# 既存リソース(参照のみ。アプリケーションもDBスキーマも変更しない)
+ecs_cluster_name          = "REPLACE_ME_cluster"
+ecs_service_name          = "REPLACE_ME_service"
+aurora_cluster_identifier = "REPLACE_ME_aurora_cluster"
+alb_target_group_arn      = "arn:aws:elasticloadbalancing:ap-northeast-1:000000000000:targetgroup/REPLACE_ME/0000000000000000"
+
+# 監視対象(例: 東京都と神奈川県)
+# コード体系は電文により異なるため、コードと名称の両方を指定しておくと確実。
+target_area_codes = ["130000", "140000", "13", "14"]
+target_area_names = ["東京都", "神奈川県"]
+
+supported_event_types = ["heavy_rain", "flood", "typhoon", "earthquake", "tsunami", "storm", "high_tide"]
+
+# 容量設計(実測に基づき必ず見直すこと)
+scaling_levels = {
+  level_0 = { ecs_desired_count = 2, ecs_min_capacity = 2, aurora_min_acu = 0.5, aurora_max_acu = 8 }
+  level_1 = { ecs_desired_count = 5, ecs_min_capacity = 5, aurora_min_acu = 2, aurora_max_acu = 16 }
+  level_2 = { ecs_desired_count = 15, ecs_min_capacity = 15, aurora_min_acu = 8, aurora_max_acu = 32 }
+  level_3 = { ecs_desired_count = 40, ecs_min_capacity = 40, aurora_min_acu = 16, aurora_max_acu = 64 }
+}
+
+absolute_max_ecs_tasks  = 50
+absolute_max_aurora_acu = 64
+baseline_reserve_tasks  = 2
+
+cooldown_minutes = 120
+scale_in_step    = 5
+
+require_manual_approval_for_level_3 = true
+allow_automatic_scale_in            = false
+
+notification_emails = ["ops@example.jp"]

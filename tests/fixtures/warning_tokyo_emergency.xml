@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Report xmlns="http://xml.kishou.go.jp/jmaxml1/" xmlns:jmx_add="http://xml.kishou.go.jp/jmaxml1/addition1/">
+  <Control>
+    <Title>気象特別警報・警報・注意報</Title>
+    <DateTime>2026-08-02T01:00:00Z</DateTime>
+    <Status>通常</Status>
+    <EditorialOffice>気象庁本庁</EditorialOffice>
+    <PublishingOffice>気象庁</PublishingOffice>
+  </Control>
+  <Head xmlns="http://xml.kishou.go.jp/jmaxml1/informationBasis1/">
+    <Title>東京都気象警報・注意報</Title>
+    <ReportDateTime>2026-08-02T11:00:00+09:00</ReportDateTime>
+    <TargetDateTime>2026-08-02T11:00:00+09:00</TargetDateTime>
+    <EventID>20260802110000_130000</EventID>
+    <InfoType>発表</InfoType>
+    <Serial/>
+    <InfoKind>気象警報・注意報</InfoKind>
+    <InfoKindVersion>1.2_0</InfoKindVersion>
+    <Headline><Text>東京都では、土砂災害に警戒してください。</Text></Headline>
+  </Head>
+  <Body xmlns="http://xml.kishou.go.jp/jmaxml1/body/meteorology1/">
+    <Warning type="気象警報・注意報（府県予報区等）">
+      <Item>
+        <Kind><Name>大雨特別警報</Name><Code>33</Code><Status>発表</Status></Kind>
+        <Kind><Name>雷注意報</Name><Code>14</Code><Status>継続</Status></Kind>
+        <Area><Name>東京都</Name><Code>130000</Code></Area>
+      </Item>
+    </Warning>
+  </Body>
+</Report>
