@@ -6,6 +6,7 @@ start command が無いとビルドに失敗する。ここでは健全性確認
 """
 from __future__ import annotations
 
+import html
 import json
 import os
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ from jma_pre_scale.models import Action
 from jma_pre_scale.notifier import audit_log, build_audit_entry
 from jma_pre_scale.orchestrator import Poller
 from jma_pre_scale.state import LockNotAcquired, build_store
+from jma_pre_scale.usage_guide import USAGE_GUIDE_CSS, usage_guide_html
 
 app = FastAPI(
     title="JMA Disaster Pre-Scale",
@@ -108,32 +110,36 @@ def index() -> str:
     try:
         st = _status_payload()
         err = ""
-        status_text = json.dumps(st, ensure_ascii=False, indent=2)
+        status_text = html.escape(json.dumps(st, ensure_ascii=False, indent=2))
     except Exception as exc:  # pragma: no cover
-        err = str(exc)
+        err = html.escape(str(exc))
         status_text = "{}"
     err_html = f'<p class="err">{err}</p>' if err else ""
+    guide = usage_guide_html()
     return f"""<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>JMA Pre-Scale</title>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JMA Pre-Scale</title>
 <style>
 body{{font-family:system-ui,sans-serif;margin:2rem;background:#0f1419;color:#e8eef5}}
 .card{{background:#1c2430;border:1px solid #2a3544;border-radius:12px;padding:1.2rem;max-width:720px}}
 .badge{{display:inline-block;padding:.2rem .6rem;border-radius:999px;border:1px solid #2a8f7e;color:#3cb8a0;font-size:.8rem}}
-button{{font:inherit;cursor:pointer;border-radius:8px;border:0;background:#1f6f63;color:white;padding:.5rem .9rem;margin-top:.8rem}}
-pre{{background:#11161d;padding:.8rem;border-radius:8px;overflow:auto;font-size:.85rem}}
+button.primary{{font:inherit;cursor:pointer;border-radius:8px;border:0;background:#1f6f63;color:white;padding:.5rem .9rem;margin-top:.8rem}}
+pre.status{{background:#11161d;padding:.8rem;border-radius:8px;overflow:auto;font-size:.85rem}}
 .err{{color:#e07a7a}}
 a{{color:#7eb8ff}}
+{USAGE_GUIDE_CSS}
 </style></head><body>
 <div class="card">
   <h1>JMA Disaster Pre-Scale</h1>
   <p>気象庁防災情報XMLを契機とした AWS 事前スケール制御基盤の ops 面です。</p>
   <p><span class="badge">Railway / dry-run</span></p>
   {err_html}
-  <pre id="status">{status_text}</pre>
-  <button type="button" onclick="runPoll()">dry-run ポーリング実行</button>
+  <pre id="status" class="status">{status_text}</pre>
+  <button class="primary" type="button" onclick="runPoll()">dry-run ポーリング実行</button>
   <p><a href="/health">/health</a> · <a href="/api/v1/status">/api/v1/status</a> · <a href="/docs">/docs</a></p>
-  <p style="color:#8b9bb0;font-size:.85rem">実スケール適用は Terraform / Lambda 側で行います。ここでの poll は判定ログ中心です。</p>
+  <p style="color:#8b9bb0;font-size:.85rem">実スケール適用は Terraform / Lambda 側で行います。右下（または画面内）の「利用手順」パレットを参照してください。</p>
 </div>
+{guide}
 <script>
 async function runPoll() {{
   const res = await fetch('/api/v1/poll', {{method:'POST'}});
