@@ -14,6 +14,10 @@ def test_health_and_status() -> None:
     assert 'id="usage-guide"' in page.text
     assert "利用手順" in page.text
     assert "ARCHITECTURE" in page.text
+    assert "WHY PRE-SCALE" in page.text
+    assert "負荷検知型" in page.text
+    assert "事前スケール" in page.text
+    assert "数万ID" in page.text
     assert "詳細利用手順" in page.text
     assert "ドラッグで移動" in page.text
     assert "Service topology" in page.text

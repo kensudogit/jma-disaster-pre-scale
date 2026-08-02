@@ -110,6 +110,10 @@ USAGE_GUIDE_CSS = """
   border-color: rgba(14,165,233,.4);
   background: linear-gradient(135deg, rgba(224,242,254,.98), rgba(186,230,253,.4));
 }
+.usage-guide-featured--purpose {
+  border-color: rgba(234,88,12,.4);
+  background: linear-gradient(135deg, rgba(255,247,237,.98), rgba(254,215,170,.35));
+}
 .usage-guide-featured-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .35rem; }
 .usage-guide-featured-head strong { font-size: .84rem; color: #312e81; }
 .usage-guide-featured-badge {
@@ -117,6 +121,8 @@ USAGE_GUIDE_CSS = """
   background: #7c3aed; color: #fff; font-size: .58rem; font-weight: 800; letter-spacing: .06em;
 }
 .usage-guide-featured--safety .usage-guide-featured-badge { background: #0284c7; }
+.usage-guide-featured--purpose .usage-guide-featured-badge { background: #ea580c; }
+.usage-guide-featured--purpose .usage-guide-featured-head strong { color: #9a3412; }
 .usage-guide-featured p { margin: 0 0 .4rem; font-size: .76rem; line-height: 1.55; color: var(--ug-text); }
 .usage-guide-items { margin: .35rem 0 0; padding-left: 1.05rem; }
 .usage-guide-items li { margin: .25rem 0; font-size: .72rem; line-height: 1.55; color: #334155; }
@@ -257,13 +263,17 @@ JMA Atom (extra / eqvol)
       <p class="usage-guide-hero-kicker">JMA Disaster Pre-Scale</p>
       <h2 class="usage-guide-hero-title">気象庁防災情報XML 事前スケール</h2>
       <p class="usage-guide-hero-lead">
-        気象庁 Atom フィードを外部監視し、既存アプリを改修せずに ECS / Aurora を災害アクセス集中前へ拡張する制御基盤です。
+        平時はほぼ無負荷、災害発生時は数万IDが一斉アクセスする特性向けに、
+        <b>負荷検知型オートスケールではなく</b>、気象庁防災情報XMLをフックとして
+        アクセス集中前にインフラを先行自動拡張（事前スケールアウト）する制御基盤です。
         Railway 上の画面は監視・dry-run 用。実適用は AWS (Terraform / Lambda / Step Functions) です。
       </p>
       <div class="usage-guide-stack" aria-label="Tech stack">
         <span class="usage-guide-stack-pill">Python 3.11+</span>
         <span class="usage-guide-stack-pill">FastAPI • uvicorn</span>
-        <span class="usage-guide-stack-pill">JMA Atom XML</span>
+        <span class="usage-guide-stack-pill">JMA Atom XML フック</span>
+        <span class="usage-guide-stack-pill">事前スケールアウト</span>
+        <span class="usage-guide-stack-pill">非・負荷検知型</span>
         <span class="usage-guide-stack-pill">Lambda • Step Functions</span>
         <span class="usage-guide-stack-pill">DynamoDB</span>
         <span class="usage-guide-stack-pill">ECS Fargate</span>
@@ -271,6 +281,26 @@ JMA Atom (extra / eqvol)
         <span class="usage-guide-stack-pill">Terraform</span>
         <span class="usage-guide-stack-pill">dry_run 既定 ON</span>
       </div>
+    </section>
+
+    <section class="usage-guide-featured usage-guide-featured--purpose" aria-label="設計意図">
+      <div class="usage-guide-featured-head">
+        <span class="usage-guide-featured-badge">WHY PRE-SCALE</span>
+        <strong>なぜ負荷検知型では足りないか</strong>
+      </div>
+      <p>
+        本システムは平時の利用がほぼなく、災害発生時に数万IDが短時間で集中します。
+        CPU/RPS などの負荷検知型オートスケールはスパイク検知後に起動するため、
+        コンテナ起動・DB 容量確保が完了する前にリクエストが溢れます。
+        そのため気象庁 Atom（extra.xml / eqvol.xml）を外部監視し、
+        警報・注意報の発表を契機に <b>アクセス到達前</b> へ ECS / Aurora を絶対容量で先行拡張します。
+      </p>
+      <ul class="usage-guide-items">
+        <li>判定トリガーは負荷メトリクスではなく JMA XML（注意報・警報・震度・津波など）</li>
+        <li>既存アプリのターゲット追跡オートスケールがあっても、本制御が MinCapacity / desired を先に上げる</li>
+        <li>EventBridge 毎分 Poller → 解析・重複排除 → SCALE_OUT 時のみ Step Functions</li>
+        <li>現状は安全ひな型（dry_run 既定）。本番適用は Terraform 設定後に dry_run 解除</li>
+      </ul>
     </section>
 
     <section class="usage-guide-featured usage-guide-featured--architecture" aria-label="アーキテクチャ">
@@ -282,9 +312,11 @@ JMA Atom (extra / eqvol)
         EventBridge が毎分 Poller を起動。取得・検証・重複排除・判定のあと、
         拡張/縮小が必要なときだけ Step Functions を起動します。
         適用順は <b>Aurora 最小ACU → ECS MinCapacity → ECS DesiredCount</b> です。
+        負荷メトリクスは判定に使いません（事前拡張専用パス）。
       </p>
       <ul class="usage-guide-items">
         <li>既存アプリのコード・DBスキーマ・業務ロジックは一切変更しない</li>
+        <li>LEVEL_0→1→2→3：注意報 / 警報 / 特別警報・高震度・津波警報などで段階拡張（容量は実測で置換）</li>
         <li>LEVEL_3（特別警報等）は人手承認。放置すると10分後に LEVEL_2 へフォールバック</li>
         <li>縮小時は拡張と逆順。自動縮小は既定オフ（手動で平時へ戻す）</li>
       </ul>
@@ -311,6 +343,24 @@ JMA Atom (extra / eqvol)
 
     <p class="usage-guide-scroll-hint">↓ 詳細利用手順・日常運用・警報時対応は下へ</p>
     <h3 class="usage-guide-workflow-title">詳細利用手順</h3>
+
+    <div class="usage-guide-section">
+      <p class="usage-guide-section-label">0. 前提（必ず理解）</p>
+      <ol class="usage-guide-steps">
+        <li>
+          <strong>アクセス特性</strong>
+          <p>平時はほぼ無利用。災害発生時は数万IDが一斉アクセスします。通常の負荷検知型オートスケールではスパイクに間に合いません。</p>
+        </li>
+        <li>
+          <strong>本システムの役割</strong>
+          <p>気象庁防災情報XMLをフックに、アクセス集中前へインフラを先行自動拡張します。判定に CPU/RPS は使いません。</p>
+        </li>
+        <li>
+          <strong>実装状態</strong>
+          <p>コード上は事前スケールパス一式（Poller / 判定 / Step Functions / ECS・Aurora 適用）が実装済み。既定は dry_run ひな型で、本番適用は Terraform 設定と dry_run 解除が必要です。Railway はこの監視・dry-run 面のみです。</p>
+        </li>
+      </ol>
+    </div>
 
     <div class="usage-guide-section">
       <p class="usage-guide-section-label">A. Railway ops 面（この画面）</p>
